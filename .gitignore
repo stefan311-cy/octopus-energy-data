@@ -1,0 +1,5 @@
+octopus_credentials.json
+octopus_hourly.csv
+.DS_Store
+__pycache__/
+*.pyc
