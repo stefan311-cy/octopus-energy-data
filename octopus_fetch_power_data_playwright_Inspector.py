@@ -1,5 +1,3 @@
-
-
 import asyncio
 import json
 from pathlib import Path
@@ -13,6 +11,7 @@ TARGET_DATE = "2026-03-13"  # Datum der Verbrauchswerte
 
 CREDENTIALS_FILE = Path(__file__).parent / "octopus_credentials.json"
 
+
 def load_credentials():
     if not CREDENTIALS_FILE.exists():
         raise FileNotFoundError(f"Credentials file not found: {CREDENTIALS_FILE}")
@@ -25,8 +24,19 @@ async def fetch_hourly_data():
     email, password = load_credentials()  # ⚠️ hier wird email und password definiert
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+
+        # LIVE VIEW Browser
+        browser = await p.chromium.launch(
+            headless=False,     # Browser sichtbar
+            slow_mo=300         # Aktionen langsamer ablaufen lassen
+        )
+
+        context = await browser.new_context()
+        page = await context.new_page()
+
+        # Optional: Playwright Inspector starten
+        # damit du live debuggen kannst
+        # await page.pause()
 
         # Login
         await page.goto("https://octopusenergy.de/login/")
@@ -34,6 +44,7 @@ async def fetch_hourly_data():
         await page.fill('input[name="password"]', password)
         await page.press('input[name="password"]', 'Enter')
         await page.wait_for_load_state("networkidle")
+
         print("Login erfolgreich")
 
         # Cookies für GraphQL Request holen
@@ -46,6 +57,7 @@ async def fetch_hourly_data():
             "Content-Type": "application/json",
             "Cookie": cookie_header
         }
+
         payload = {
             "operationName": "getAccountMeasurements",
             "query": """
@@ -95,17 +107,24 @@ async def fetch_hourly_data():
         await browser.close()
         return data
 
+
 def save_csv(data):
+
     edges = data.get("data", {}).get("property", {}).get("measurements", {}).get("edges", [])
+
     if not edges:
         print("Keine Messdaten gefunden.")
         return
 
     rows = []
+
     for entry in edges:
+
         node = entry["node"]
+
         if node.get("durationInSeconds") != 3600:
             continue
+
         rows.append({
             "startAt": node["startAt"],
             "endAt": node["endAt"],
@@ -115,14 +134,18 @@ def save_csv(data):
         })
 
     df = pd.DataFrame(rows)
+
     df.to_csv(CSV_FILE, index=False)
+
     print(f"CSV erstellt: {CSV_FILE}")
+
 
 async def main():
     print("Daten abrufen...")
     data = await fetch_hourly_data()
     save_csv(data)
     print("Fertig.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
